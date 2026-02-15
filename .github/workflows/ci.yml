@@ -1,0 +1,39 @@
+name: CI
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ['3.10', '3.11', '3.12']
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+      - name: Run tests
+        run: pytest test_querycost.py -v --tb=short
+      - name: Smoke test CLI
+        run: |
+          python -c "
+import pandas as pd
+rows = []
+for i in range(20):
+    rows.append({
+        'query_text': f'SELECT * FROM t WHERE id = {i}',
+        'user_email': f'user{i%3}@co.com',
+        'bytes_scanned': 5e8 + i*1e7,
+        'execution_time_ms': 1000,
+    })
+pd.DataFrame(rows).to_csv('/tmp/test_queries.csv', index=False)
+          "
+          python main.py scan /tmp/test_queries.csv
+          python main.py top /tmp/test_queries.csv -n 3
+          python main.py anomalies /tmp/test_queries.csv
+          python main.py users /tmp/test_queries.csv -n 3
